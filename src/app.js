@@ -14,9 +14,12 @@ const corsOrigin = process.env.FRONTEND_ORIGIN;
 app.use(
   cors(
     corsOrigin
-      ? { origin: corsOrigin.split(",").map((o) => o.trim()), credentials: true }
-      : { origin: true },
-  ),
+      ? {
+          origin: corsOrigin.split(",").map((o) => o.trim()),
+          credentials: true,
+        }
+      : { origin: true }
+  )
 );
 
 // Middleware
@@ -40,8 +43,8 @@ app.use((err, req, res, next) => {
       createHttpError.isHttpError(err) && err.expose
         ? err.message || "Error"
         : status < 500
-          ? err.message || "Error"
-          : "Internal server error",
+        ? err.message || "Error"
+        : "Internal server error",
   };
   if (err.duplicates) body.duplicates = err.duplicates;
   if (status >= 500) console.error(err.stack);
@@ -49,7 +52,8 @@ app.use((err, req, res, next) => {
   res.status(status).json(body);
 });
 
-const PORT = process.env.PORT || 5000;
-app.listen(PORT, () => {
-  console.log(`Server running on port ${PORT}`);
+// Render injects PORT in production; local dev defaults to 5000 or set PORT in .env
+const PORT = Number(process.env.PORT) || 5000;
+app.listen(PORT, "0.0.0.0", () => {
+  console.log(`Server listening on port ${PORT}`);
 });
