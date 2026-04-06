@@ -8,7 +8,7 @@ const upstreamMessage = (error) =>
 // Run Actor 1 — Get following list of seed accounts
 const runFollowingActor = async ({
   usernames,
-  followingLimit = 2000,
+  followingLimit = 500,
   token,
 }) => {
   try {

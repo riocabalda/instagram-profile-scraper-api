@@ -47,6 +47,7 @@ app.use((err, req, res, next) => {
         : "Internal server error",
   };
   if (err.duplicates) body.duplicates = err.duplicates;
+  if (err.reason && typeof err.reason === "string") body.reason = err.reason;
   if (status >= 500) console.error(err.stack);
   else console.error(err.message);
   res.status(status).json(body);

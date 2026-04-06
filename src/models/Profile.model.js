@@ -25,7 +25,7 @@ const profileSchema = new mongoose.Schema(
       enum: ["pending", "checked", "error"],
       default: "pending",
     },
-    hasExternalUrl: { type: Boolean, default: false },
+    has_external_url: { type: Boolean, default: false },
   },
   { timestamps: true, _id: false },
 );

@@ -1,3 +1,4 @@
+import { LINK_DOMAINS } from "../constant/socialDomain.js";
 import Input from "../models/Input.model.js";
 
 // Split array into chunks
@@ -9,19 +10,44 @@ export const chunkArray = (arr, size) => {
   return chunks;
 };
 
-// Check which usernames from inputs are new, save them, return duplicates
+/**
+ * Validates input seeds. If any username is duplicated in the body or already
+ * stored in `inputs`, returns those handles and **empty** `newUsernames` so the
+ * caller never persists a partial batch.
+ */
 export const processInputUsernames = async (inputs) => {
-  const normalized = inputs.map((u) => u.trim().toLowerCase());
+  const normalized = inputs
+    .map((u) => String(u ?? "").trim().toLowerCase())
+    .filter((u) => u.length > 0);
+
+  const counts = new Map();
+  for (const u of normalized) {
+    counts.set(u, (counts.get(u) ?? 0) + 1);
+  }
+  const duplicatesInPayload = [...counts.entries()]
+    .filter(([, c]) => c > 1)
+    .map(([u]) => u)
+    .sort((a, b) => a.localeCompare(b));
+
+  if (duplicatesInPayload.length > 0) {
+    return {
+      duplicates: duplicatesInPayload,
+      newUsernames: [],
+      duplicatesInPayload: true,
+    };
+  }
+
+  const uniqueInOrder = [...new Set(normalized)];
+
   const duplicates = [];
   const newUsernames = [];
 
-  // Check existing in DB
-  const existing = await Input.find({ username: { $in: normalized } }).select(
-    "username"
-  );
+  const existing = await Input.find({
+    username: { $in: uniqueInOrder },
+  }).select("username");
   const existingSet = new Set(existing.map((e) => e.username));
 
-  for (const username of normalized) {
+  for (const username of uniqueInOrder) {
     if (existingSet.has(username)) {
       duplicates.push(username);
     } else {
@@ -29,7 +55,12 @@ export const processInputUsernames = async (inputs) => {
     }
   }
 
-  return { duplicates, newUsernames };
+  if (duplicates.length > 0) {
+    duplicates.sort((a, b) => a.localeCompare(b));
+    return { duplicates, newUsernames: [], duplicatesInPayload: false };
+  }
+
+  return { duplicates: [], newUsernames, duplicatesInPayload: false };
 };
 
 /** @param {unknown} value */
@@ -54,19 +85,27 @@ export function normalizeProfileId(rawId, usernameNorm) {
   return `synth-${randomUUID()}`;
 }
 
-export function numOrZero(value) {
-  const n = Number(value);
-  return Number.isFinite(n) ? n : 0;
-}
-
 /**
  * @param {Record<string, unknown>} profile
- * @param {{ hasExternalUrl: boolean; followersMin: number; followersMax: number }} opts
+ * @param {{ has_external_url: boolean; followersMin: number; followersMax: number }} opts
  * @returns {Record<string, unknown> | null}
  */
 export function mapActorProfileToDoc(profile, opts) {
+  const {
+    has_external_url,
+    followersMin = 500,
+    followersMax = 50_000,
+  } = opts;
   const username = normalizeUsername(profile.username);
-  if (!username) return null;
+  const criteriaCheck =
+    profile.followersCount &&
+    profile.externalUrl &&
+    profile.followersCount >= followersMin &&
+    profile.followersCount <= followersMax &&
+    (profile.inputUrl || profile.url) &&
+    hasMatchingExternalUrl(profile.externalUrl);
+
+  if (!username || !criteriaCheck) return null;
 
   const id = normalizeProfileId(profile.id, username);
   const fullName =
@@ -84,9 +123,7 @@ export function mapActorProfileToDoc(profile, opts) {
     (typeof profile.inputUrl === "string" && profile.inputUrl.trim()) ||
     (typeof profile.input_url === "string" && profile.input_url?.trim()) ||
     `https://www.instagram.com/${username}`;
-  const followers = numOrZero(
-    profile.followersCount ?? profile.followers_count
-  );
+  const followers = profile.followersCount || -1;
 
   return {
     id,
@@ -96,7 +133,7 @@ export function mapActorProfileToDoc(profile, opts) {
     input_url: inputUrl,
     followers_count: followers,
     bio,
-    hasExternalUrl: opts.hasExternalUrl,
+    has_external_url,
   };
 }
 
@@ -125,9 +162,7 @@ export function mapRelatedProfileToDoc(related) {
     (typeof related.inputUrl === "string" && related.inputUrl.trim()) ||
     url;
 
-  const followers = numOrZero(
-    related.followers_count ?? related.followersCount
-  );
+  const followers = related.followersCount || -1;
 
   return {
     id,
@@ -137,6 +172,15 @@ export function mapRelatedProfileToDoc(related) {
     input_url: inputUrl,
     followers_count: followers,
     bio,
-    hasExternalUrl: false,
+    has_external_url: false,
   };
+}
+
+export function hasMatchingExternalUrl(url) {
+  try {
+    const hostname = new URL(url).hostname.replace(/^www\./, "");
+    return LINK_DOMAINS.includes(hostname);
+  } catch {
+    return false;
+  }
 }

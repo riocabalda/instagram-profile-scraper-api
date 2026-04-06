@@ -8,7 +8,7 @@ import {
   chunkArray,
   processInputUsernames,
   mapActorProfileToDoc,
-  mapRelatedProfileToDoc,
+  hasMatchingExternalUrl,
 } from "../utils/pipeline.js";
 
 const DEFAULT_FOLLOWERS_MIN = 500;
@@ -16,20 +16,25 @@ const DEFAULT_FOLLOWERS_MAX = 50_000;
 
 const runScrapePipeline = async ({
   inputs,
-  followingLimit = 2000,
+  followingLimit = 500,
   token,
-  chunkLimit = 100,
+  chunkLimit = 500,
   followersMin = DEFAULT_FOLLOWERS_MIN,
   followersMax = DEFAULT_FOLLOWERS_MAX,
 }) => {
-  const { duplicates, newUsernames } = await processInputUsernames(inputs);
+  const { duplicates, newUsernames, duplicatesInPayload } =
+    await processInputUsernames(inputs);
 
   if (duplicates.length > 0) {
+    // Whole batch rejected — no Input rows are inserted.
     throw createHttpError(
       409,
-      "Duplicate usernames found in inputs usernames",
+      duplicatesInPayload
+        ? "Duplicate usernames in request body (same handle listed more than once)"
+        : "Duplicate usernames already registered as inputs",
       {
         duplicates,
+        reason: duplicatesInPayload ? "payload" : "database",
       }
     );
   }
@@ -58,27 +63,63 @@ const runScrapePipeline = async ({
     const profilesToSave = [];
 
     for (const profile of profileResults) {
-      if (
-        profile.relatedProfiles &&
-        profile.relatedProfiles.length > 0 &&
-        profile.externalUrl
-      ) {
-        const main = mapActorProfileToDoc(profile, { hasExternalUrl: true });
-        if (main) profilesToSave.push(main);
+      // if (
+      //   profile.relatedProfiles &&
+      //   profile.relatedProfiles.length > 0 &&
+      //   profile.externalUrl
+      // ) {
+      //   const main = mapActorProfileToDoc(profile, {
+      //     has_external_url: true,
+      //     followersMin,
+      //     followersMax,
+      //   });
+      //   if (main) profilesToSave.push(main);
 
-        for (const related of profile.relatedProfiles) {
-          const mapped = mapRelatedProfileToDoc(
-            typeof related === "object" && related !== null ? related : {}
-          );
-          if (mapped) profilesToSave.push(mapped);
-        }
-      } else if (
+      //   const relatedList = Array.isArray(profile.relatedProfiles)
+      //     ? profile.relatedProfiles
+      //     : [];
+      //   const relatedChunks = chunkArray(relatedList, chunkLimit);
+      //   for (const relatedChunk of relatedChunks) {
+      //     for (const related of relatedChunk) {
+      //       const rel =
+      //         typeof related === "object" && related !== null ? related : {};
+      //       const mapped = mapActorProfileToDoc(rel, {
+      //         has_external_url: false,
+      //         followersMin,
+      //         followersMax,
+      //       });
+      //       if (mapped) profilesToSave.push(mapped);
+      //     }
+      //   }
+      // } else if (
+      //   profile.followersCount &&
+      //   profile.externalUrl &&
+      //   profile.followersCount >= followersMin &&
+      //   profile.followersCount <= followersMax &&
+      //   (profile.inputUrl || profile.url) &&
+      //   hasMatchingExternalUrl(profile.externalUrl)
+      // ) {
+      //   const doc = mapActorProfileToDoc(profile, {
+      //     has_external_url: false,
+      //     followersMin,
+      //     followersMax,
+      //   });
+      //   if (doc) profilesToSave.push(doc);
+      // }
+
+      if (
         profile.followersCount &&
+        profile.externalUrl &&
         profile.followersCount >= followersMin &&
         profile.followersCount <= followersMax &&
-        (profile.inputUrl || profile.url)
+        (profile.inputUrl || profile.url) &&
+        hasMatchingExternalUrl(profile.externalUrl)
       ) {
-        const doc = mapActorProfileToDoc(profile, { hasExternalUrl: false });
+        const doc = mapActorProfileToDoc(profile, {
+          has_external_url: false,
+          followersMin,
+          followersMax,
+        });
         if (doc) profilesToSave.push(doc);
       }
     }
@@ -165,8 +206,15 @@ const markProfilesCheckedByUsernames = async (usernames) => {
   return { modifiedCount, matchedCount };
 };
 
+const deleteAllPendingProfiles = async () => {
+  const result = await Profile.deleteMany({ status: "pending" });
+  const deletedCount = result.deletedCount ?? 0;
+  return { deletedCount };
+};
+
 export {
   runScrapePipeline,
   getPendingProfiles,
   markProfilesCheckedByUsernames,
+  deleteAllPendingProfiles,
 };

@@ -2,6 +2,7 @@ import {
   runScrapePipeline,
   getPendingProfiles,
   markProfilesCheckedByUsernames,
+  deleteAllPendingProfiles,
 } from "../services/scraper.service.js";
 
 const triggerScrapeSync = async (req, res, next) => {
@@ -60,4 +61,18 @@ const markProfilesChecked = async (req, res, next) => {
   }
 };
 
-export { triggerScrapeSync, getProfiles, markProfilesChecked };
+const deletePendingProfiles = async (req, res, next) => {
+  try {
+    const result = await deleteAllPendingProfiles();
+    res.status(200).json({ success: true, data: result });
+  } catch (err) {
+    next(err);
+  }
+};
+
+export {
+  triggerScrapeSync,
+  getProfiles,
+  markProfilesChecked,
+  deletePendingProfiles,
+};
