@@ -19,6 +19,7 @@ const profileSchema = new mongoose.Schema(
     url: { type: String, default: "" },
     input_url: { type: String, default: "" },
     followers_count: { type: Number, default: 0 },
+    follows_count: { type: Number, default: 0 },
     bio: { type: String, default: "" },
     status: {
       type: String,

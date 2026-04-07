@@ -94,8 +94,85 @@ const validateGetProfiles = [
   },
 ];
 
+const validatePostQualifiedSeed = [
+  body("username")
+    .isString()
+    .trim()
+    .notEmpty()
+    .withMessage("username is required"),
+  body("following")
+    .isInt({ min: 0 })
+    .withMessage("following must be a non-negative integer"),
+
+  (req, res, next) => {
+    const errors = validationResult(req);
+    if (!errors.isEmpty()) {
+      return res.status(422).json({ success: false, errors: errors.array() });
+    }
+    next();
+  },
+];
+
+const validateGetQualifiedSeeds = [
+  (req, res, next) => {
+    const allRaw = req.query.all;
+    if (
+      allRaw !== undefined &&
+      allRaw !== "" &&
+      allRaw !== "true" &&
+      allRaw !== "1"
+    ) {
+      return res.status(422).json({
+        success: false,
+        errors: [
+          {
+            type: "field",
+            msg: 'all must be "true" or "1" when provided',
+            path: "all",
+            location: "query",
+          },
+        ],
+      });
+    }
+    const all = allRaw === "true" || allRaw === "1";
+    if (!all) {
+      const raw = req.query.followingLimit;
+      if (raw === undefined || raw === "") {
+        return res.status(422).json({
+          success: false,
+          errors: [
+            {
+              type: "field",
+              msg: "followingLimit must be a non-negative integer",
+              path: "followingLimit",
+              location: "query",
+            },
+          ],
+        });
+      }
+      const n = parseInt(String(raw), 10);
+      if (!Number.isInteger(n) || n < 0) {
+        return res.status(422).json({
+          success: false,
+          errors: [
+            {
+              type: "field",
+              msg: "followingLimit must be a non-negative integer",
+              path: "followingLimit",
+              location: "query",
+            },
+          ],
+        });
+      }
+    }
+    next();
+  },
+];
+
 export {
   validateScrapePayload,
   validateGetProfiles,
   validateMarkProfilesChecked,
+  validatePostQualifiedSeed,
+  validateGetQualifiedSeeds,
 };

@@ -3,12 +3,16 @@ import {
   validateScrapePayload,
   validateGetProfiles,
   validateMarkProfilesChecked,
+  validatePostQualifiedSeed,
+  validateGetQualifiedSeeds,
 } from "../validations/scraper.validation.js";
 import {
   triggerScrapeSync,
   getProfiles,
   markProfilesChecked,
   deletePendingProfiles,
+  postQualifiedSeed,
+  getQualifiedSeeds,
 } from "../controller/scraper.controller.js";
 
 const router = express.Router();
@@ -24,5 +28,16 @@ router.delete("/profiles/pending", deletePendingProfiles);
 
 // PATCH /api/scraper/profiles — mark usernames as checked (reviewed)
 router.patch("/profiles", validateMarkProfilesChecked, markProfilesChecked);
+
+// POST /api/scraper/qualified-seeds — save a qualified seed (username + following)
+router.post(
+  "/qualified-seeds",
+  validatePostQualifiedSeed,
+  postQualifiedSeed
+);
+
+// GET /api/scraper/qualified-seeds?followingLimit=500
+//     /api/scraper/qualified-seeds?all=true — every seed, no following cap, includes input usernames
+router.get("/qualified-seeds", validateGetQualifiedSeeds, getQualifiedSeeds);
 
 export default router;

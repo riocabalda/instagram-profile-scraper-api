@@ -1,3 +1,4 @@
+import { randomUUID } from "node:crypto";
 import { LINK_DOMAINS } from "../constant/socialDomain.js";
 import Input from "../models/Input.model.js";
 
@@ -124,6 +125,15 @@ export function mapActorProfileToDoc(profile, opts) {
     (typeof profile.input_url === "string" && profile.input_url?.trim()) ||
     `https://www.instagram.com/${username}`;
   const followers = profile.followersCount || -1;
+  const followsRaw =
+    profile.followsCount ??
+    profile.followingCount ??
+    profile.follows_count ??
+    profile.following_count;
+  const follows =
+    typeof followsRaw === "number" && Number.isFinite(followsRaw)
+      ? followsRaw
+      : 0;
 
   return {
     id,
@@ -132,6 +142,7 @@ export function mapActorProfileToDoc(profile, opts) {
     url,
     input_url: inputUrl,
     followers_count: followers,
+    follows_count: follows,
     bio,
     has_external_url,
   };
@@ -163,6 +174,15 @@ export function mapRelatedProfileToDoc(related) {
     url;
 
   const followers = related.followersCount || -1;
+  const followsRaw =
+    related.followsCount ??
+    related.followingCount ??
+    related.follows_count ??
+    related.following_count;
+  const follows =
+    typeof followsRaw === "number" && Number.isFinite(followsRaw)
+      ? followsRaw
+      : 0;
 
   return {
     id,
@@ -171,6 +191,7 @@ export function mapRelatedProfileToDoc(related) {
     url,
     input_url: inputUrl,
     followers_count: followers,
+    follows_count: follows,
     bio,
     has_external_url: false,
   };

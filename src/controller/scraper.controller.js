@@ -3,6 +3,9 @@ import {
   getPendingProfiles,
   markProfilesCheckedByUsernames,
   deleteAllPendingProfiles,
+  upsertQualifiedSeed,
+  getQualifiedSeedsFiltered,
+  getQualifiedSeedsAll,
 } from "../services/scraper.service.js";
 
 const triggerScrapeSync = async (req, res, next) => {
@@ -70,9 +73,38 @@ const deletePendingProfiles = async (req, res, next) => {
   }
 };
 
+const postQualifiedSeed = async (req, res, next) => {
+  try {
+    const { username, following } = req.body;
+    const data = await upsertQualifiedSeed({ username, following });
+    res.status(200).json({ success: true, data });
+  } catch (err) {
+    next(err);
+  }
+};
+
+const getQualifiedSeeds = async (req, res, next) => {
+  try {
+    const all =
+      req.query.all === "true" ||
+      req.query.all === "1" ||
+      req.query.all === true;
+    const data = all
+      ? await getQualifiedSeedsAll()
+      : await getQualifiedSeedsFiltered({
+          followingLimit: parseInt(String(req.query.followingLimit), 10),
+        });
+    res.status(200).json({ success: true, data });
+  } catch (err) {
+    next(err);
+  }
+};
+
 export {
   triggerScrapeSync,
   getProfiles,
   markProfilesChecked,
   deletePendingProfiles,
+  postQualifiedSeed,
+  getQualifiedSeeds,
 };

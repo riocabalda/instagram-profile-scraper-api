@@ -2,6 +2,7 @@ import { randomUUID } from "node:crypto";
 import createHttpError from "http-errors";
 import Input from "../models/Input.model.js";
 import Profile from "../models/Profile.model.js";
+import QualifiedSeed from "../models/QualifiedSeed.model.js";
 import { withPagination } from "../utils/paginate.js";
 import { runFollowingActor, runProfileActor } from "../utils/apify.js";
 import {
@@ -180,8 +181,27 @@ const getPendingProfiles = async ({ page = 1, limit = 100 }) => {
     }
   );
 
+  const usernames = results.docs.map((d) =>
+    String(d.username || "").toLowerCase()
+  );
+  const qualifiedRows = await QualifiedSeed.find({
+    username: { $in: usernames },
+  })
+    .select("username")
+    .lean();
+  const qualifiedSet = new Set(
+    qualifiedRows.map((r) => String(r.username || "").toLowerCase())
+  );
+
+  const data = results.docs.map((doc) => ({
+    ...doc,
+    is_qualified_seed: qualifiedSet.has(
+      String(doc.username || "").toLowerCase()
+    ),
+  }));
+
   return {
-    data: results.docs,
+    data,
     pagination: withPagination(results),
   };
 };
@@ -212,9 +232,79 @@ const deleteAllPendingProfiles = async () => {
   return { deletedCount };
 };
 
+/**
+ * @param {{ username: string; following: number }} params
+ */
+const upsertQualifiedSeed = async ({ username, following }) => {
+  const norm = String(username ?? "")
+    .trim()
+    .toLowerCase();
+  if (!norm) {
+    throw createHttpError(400, "username is required", { expose: true });
+  }
+  const followingNum = Number(following);
+  if (!Number.isFinite(followingNum) || followingNum < 0) {
+    throw createHttpError(400, "following must be a non-negative number", {
+      expose: true,
+    });
+  }
+
+  await QualifiedSeed.updateOne(
+    { username: norm },
+    { $setOnInsert: { username: norm, following: Math.floor(followingNum) } },
+    { upsert: true }
+  );
+
+  const doc = await QualifiedSeed.findOne({ username: norm }).lean();
+  return {
+    username: doc?.username ?? norm,
+    following: doc?.following ?? Math.floor(followingNum),
+  };
+};
+
+const mapQualifiedSeedDocs = (docs) =>
+  docs.map((d) => ({
+    username: d.username,
+    following: d.following,
+  }));
+
+/**
+ * All qualified seed documents (no following cap, includes pipeline input usernames).
+ */
+const getQualifiedSeedsAll = async () => {
+  const docs = await QualifiedSeed.find({}).sort({ createdAt: -1 }).lean();
+  return mapQualifiedSeedDocs(docs);
+};
+
+/**
+ * Qualified seeds with following count at or below the limit, excluding usernames
+ * registered as pipeline inputs.
+ * @param {{ followingLimit: number }} params
+ */
+const getQualifiedSeedsFiltered = async ({ followingLimit }) => {
+  const limitNum = Number(followingLimit);
+  if (!Number.isFinite(limitNum) || limitNum < 0) {
+    throw createHttpError(400, "followingLimit must be a non-negative number", {
+      expose: true,
+    });
+  }
+  const inputUsernames = await Input.distinct("username");
+  const filter = {
+    following: { $lte: Math.floor(limitNum) },
+    ...(inputUsernames.length > 0
+      ? { username: { $nin: inputUsernames } }
+      : {}),
+  };
+  const docs = await QualifiedSeed.find(filter).sort({ createdAt: -1 }).lean();
+  return mapQualifiedSeedDocs(docs);
+};
+
 export {
   runScrapePipeline,
   getPendingProfiles,
   markProfilesCheckedByUsernames,
   deleteAllPendingProfiles,
+  upsertQualifiedSeed,
+  getQualifiedSeedsFiltered,
+  getQualifiedSeedsAll,
 };
