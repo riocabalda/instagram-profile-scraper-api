@@ -46,7 +46,7 @@ router.delete(
 );
 
 // GET /api/scraper/qualified-seeds?followingLimit=500
-//     /api/scraper/qualified-seeds?all=true — every seed, no following cap, includes input usernames
+//     /api/scraper/qualified-seeds?all=true — every seed (no following cap), excludes pipeline inputs
 router.get("/qualified-seeds", validateGetQualifiedSeeds, getQualifiedSeeds);
 
 export default router;

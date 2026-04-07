@@ -10,3 +10,25 @@ export const withPagination = (results) => {
     next_page: results.nextPage,
   };
 };
+
+/**
+ * Pagination metadata in the same shape mongoose-paginate-v2 exposes to withPagination.
+ * @param {number} totalDocs
+ * @param {number} page 1-based
+ * @param {number} limit
+ */
+export const paginationFromCount = (totalDocs, page, limit) => {
+  const totalPages = limit > 0 ? Math.ceil(totalDocs / limit) || 1 : 1;
+  const hasPrevPage = page > 1;
+  const hasNextPage = page < totalPages;
+  return withPagination({
+    totalDocs,
+    limit,
+    page,
+    totalPages,
+    hasPrevPage,
+    hasNextPage,
+    prevPage: hasPrevPage ? page - 1 : null,
+    nextPage: hasNextPage ? page + 1 : null,
+  });
+};

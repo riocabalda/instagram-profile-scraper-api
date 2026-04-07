@@ -3,7 +3,7 @@ import createHttpError from "http-errors";
 import Input from "../models/Input.model.js";
 import Profile from "../models/Profile.model.js";
 import QualifiedSeed from "../models/QualifiedSeed.model.js";
-import { withPagination } from "../utils/paginate.js";
+import { paginationFromCount } from "../utils/paginate.js";
 import { runFollowingActor, runProfileActor } from "../utils/apify.js";
 import {
   chunkArray,
@@ -170,39 +170,64 @@ const runScrapePipeline = async ({
   };
 };
 
-const getPendingProfiles = async ({ page = 1, limit = 100 }) => {
-  const results = await Profile.paginate(
-    { status: "pending" },
+const PENDING_PROFILES_PAGE_SIZE_DEFAULT = 100;
+const PENDING_PROFILES_PAGE_SIZE_MAX = 500;
+
+/**
+ * Pending profiles: uses one aggregation — $match on status uses { status, createdAt } index,
+ * $facet runs count + sort/skip/limit in parallel, $lookup checks qualified_seed by username
+ * (pipeline $limit: 1) so we avoid a second round trip and huge $in batches.
+ */
+const getPendingProfiles = async ({
+  page = 1,
+  limit = PENDING_PROFILES_PAGE_SIZE_DEFAULT,
+}) => {
+  const p = Number(page);
+  const safePage = Number.isFinite(p) && p >= 1 ? Math.floor(p) : 1;
+  const l = Number(limit);
+  const safeLimitRaw =
+    Number.isFinite(l) && l >= 1
+      ? Math.floor(l)
+      : PENDING_PROFILES_PAGE_SIZE_DEFAULT;
+  const safeLimit = Math.min(safeLimitRaw, PENDING_PROFILES_PAGE_SIZE_MAX);
+  const skip = (safePage - 1) * safeLimit;
+  const qualifiedColl = QualifiedSeed.collection.name;
+
+  const [facetResult] = await Profile.aggregate([
+    { $match: { status: "pending" } },
     {
-      page,
-      limit,
-      sort: { createdAt: -1 },
-      lean: true,
-    }
-  );
+      $facet: {
+        metadata: [{ $count: "total" }],
+        data: [
+          { $sort: { createdAt: -1 } },
+          { $skip: skip },
+          { $limit: safeLimit },
+          {
+            $lookup: {
+              from: qualifiedColl,
+              localField: "username",
+              foreignField: "username",
+              pipeline: [{ $limit: 1 }, { $project: { _id: 1 } }],
+              as: "_qualified_hit",
+            },
+          },
+          {
+            $addFields: {
+              is_qualified_seed: { $gt: [{ $size: "$_qualified_hit" }, 0] },
+            },
+          },
+          { $project: { _qualified_hit: 0 } },
+        ],
+      },
+    },
+  ]);
 
-  const usernames = results.docs.map((d) =>
-    String(d.username || "").toLowerCase()
-  );
-  const qualifiedRows = await QualifiedSeed.find({
-    username: { $in: usernames },
-  })
-    .select("username")
-    .lean();
-  const qualifiedSet = new Set(
-    qualifiedRows.map((r) => String(r.username || "").toLowerCase())
-  );
-
-  const data = results.docs.map((doc) => ({
-    ...doc,
-    is_qualified_seed: qualifiedSet.has(
-      String(doc.username || "").toLowerCase()
-    ),
-  }));
+  const totalDocs = facetResult?.metadata?.[0]?.total ?? 0;
+  const data = facetResult?.data ?? [];
 
   return {
     data,
-    pagination: withPagination(results),
+    pagination: paginationFromCount(totalDocs, safePage, safeLimit),
   };
 };
 
@@ -236,7 +261,9 @@ const deleteAllPendingProfiles = async () => {
  * @param {{ username: string; following: number }} params
  */
 const upsertQualifiedSeed = async ({ username, following }) => {
-  let norm = String(username ?? "").trim().toLowerCase();
+  let norm = String(username ?? "")
+    .trim()
+    .toLowerCase();
   if (norm.startsWith("@")) {
     norm = norm.slice(1).trim();
   }
@@ -268,7 +295,9 @@ const upsertQualifiedSeed = async ({ username, following }) => {
  * @param {string} username
  */
 const deleteQualifiedSeedByUsername = async (username) => {
-  let norm = String(username ?? "").trim().toLowerCase();
+  let norm = String(username ?? "")
+    .trim()
+    .toLowerCase();
   if (norm.startsWith("@")) {
     norm = norm.slice(1).trim();
   }
@@ -290,16 +319,51 @@ const mapQualifiedSeedDocs = (docs) =>
   }));
 
 /**
- * All qualified seed documents (no following cap, includes pipeline input usernames).
+ * Qualified seeds excluding usernames registered as pipeline inputs.
+ * Uses aggregation + $lookup (see getQualifiedSeedsFiltered).
+ * @param {{ followingMax?: number }} [opts] If set, only seeds with following <= followingMax.
+ */
+const aggregateQualifiedSeedsExcludingInputs = async (opts = {}) => {
+  const { followingMax } = opts;
+  const inputCollection = Input.collection.name;
+  const pipeline = [];
+
+  if (followingMax != null) {
+    pipeline.push({ $match: { following: { $lte: followingMax } } });
+  }
+
+  pipeline.push(
+    {
+      $lookup: {
+        from: inputCollection,
+        localField: "username",
+        foreignField: "username",
+        as: "_pipeline_input",
+      },
+    },
+    { $match: { _pipeline_input: { $size: 0 } } },
+    { $sort: { createdAt: -1 } },
+    { $project: { username: 1, following: 1, _id: 0 } }
+  );
+
+  const docs = await QualifiedSeed.aggregate(pipeline);
+  return mapQualifiedSeedDocs(docs);
+};
+
+/**
+ * All qualified seed documents (no following cap), excluding pipeline input usernames.
  */
 const getQualifiedSeedsAll = async () => {
-  const docs = await QualifiedSeed.find({}).sort({ createdAt: -1 }).lean();
-  return mapQualifiedSeedDocs(docs);
+  return aggregateQualifiedSeedsExcludingInputs();
 };
 
 /**
  * Qualified seeds with following count at or below the limit, excluding usernames
  * registered as pipeline inputs.
+ *
+ * Uses a single aggregation with $lookup instead of distinct + $nin: one round trip,
+ * avoids huge $nin arrays (slow and BSON query size limits), and uses Input’s
+ * username index for the join.
  * @param {{ followingLimit: number }} params
  */
 const getQualifiedSeedsFiltered = async ({ followingLimit }) => {
@@ -309,15 +373,8 @@ const getQualifiedSeedsFiltered = async ({ followingLimit }) => {
       expose: true,
     });
   }
-  const inputUsernames = await Input.distinct("username");
-  const filter = {
-    following: { $lte: Math.floor(limitNum) },
-    ...(inputUsernames.length > 0
-      ? { username: { $nin: inputUsernames } }
-      : {}),
-  };
-  const docs = await QualifiedSeed.find(filter).sort({ createdAt: -1 }).lean();
-  return mapQualifiedSeedDocs(docs);
+  const cap = Math.floor(limitNum);
+  return aggregateQualifiedSeedsExcludingInputs({ followingMax: cap });
 };
 
 export {
