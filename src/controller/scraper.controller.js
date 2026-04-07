@@ -4,6 +4,7 @@ import {
   markProfilesCheckedByUsernames,
   deleteAllPendingProfiles,
   upsertQualifiedSeed,
+  deleteQualifiedSeedByUsername,
   getQualifiedSeedsFiltered,
   getQualifiedSeedsAll,
 } from "../services/scraper.service.js";
@@ -100,6 +101,16 @@ const getQualifiedSeeds = async (req, res, next) => {
   }
 };
 
+const deleteQualifiedSeed = async (req, res, next) => {
+  try {
+    const username = req.query.username;
+    const data = await deleteQualifiedSeedByUsername(String(username ?? ""));
+    res.status(200).json({ success: true, data });
+  } catch (err) {
+    next(err);
+  }
+};
+
 export {
   triggerScrapeSync,
   getProfiles,
@@ -107,4 +118,5 @@ export {
   deletePendingProfiles,
   postQualifiedSeed,
   getQualifiedSeeds,
+  deleteQualifiedSeed,
 };

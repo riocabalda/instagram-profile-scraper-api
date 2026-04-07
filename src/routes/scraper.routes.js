@@ -4,6 +4,7 @@ import {
   validateGetProfiles,
   validateMarkProfilesChecked,
   validatePostQualifiedSeed,
+  validateDeleteQualifiedSeed,
   validateGetQualifiedSeeds,
 } from "../validations/scraper.validation.js";
 import {
@@ -13,6 +14,7 @@ import {
   deletePendingProfiles,
   postQualifiedSeed,
   getQualifiedSeeds,
+  deleteQualifiedSeed,
 } from "../controller/scraper.controller.js";
 
 const router = express.Router();
@@ -34,6 +36,13 @@ router.post(
   "/qualified-seeds",
   validatePostQualifiedSeed,
   postQualifiedSeed
+);
+
+// DELETE /api/scraper/qualified-seeds?username=sam.22 — remove one qualified seed
+router.delete(
+  "/qualified-seeds",
+  validateDeleteQualifiedSeed,
+  deleteQualifiedSeed
 );
 
 // GET /api/scraper/qualified-seeds?followingLimit=500

@@ -236,9 +236,10 @@ const deleteAllPendingProfiles = async () => {
  * @param {{ username: string; following: number }} params
  */
 const upsertQualifiedSeed = async ({ username, following }) => {
-  const norm = String(username ?? "")
-    .trim()
-    .toLowerCase();
+  let norm = String(username ?? "").trim().toLowerCase();
+  if (norm.startsWith("@")) {
+    norm = norm.slice(1).trim();
+  }
   if (!norm) {
     throw createHttpError(400, "username is required", { expose: true });
   }
@@ -249,17 +250,37 @@ const upsertQualifiedSeed = async ({ username, following }) => {
     });
   }
 
+  const followingInt = Math.floor(followingNum);
   await QualifiedSeed.updateOne(
     { username: norm },
-    { $setOnInsert: { username: norm, following: Math.floor(followingNum) } },
+    { $set: { username: norm, following: followingInt } },
     { upsert: true }
   );
 
   const doc = await QualifiedSeed.findOne({ username: norm }).lean();
   return {
     username: doc?.username ?? norm,
-    following: doc?.following ?? Math.floor(followingNum),
+    following: doc?.following ?? followingInt,
   };
+};
+
+/**
+ * @param {string} username
+ */
+const deleteQualifiedSeedByUsername = async (username) => {
+  let norm = String(username ?? "").trim().toLowerCase();
+  if (norm.startsWith("@")) {
+    norm = norm.slice(1).trim();
+  }
+  if (!norm) {
+    throw createHttpError(400, "username is required", { expose: true });
+  }
+  const result = await QualifiedSeed.deleteOne({ username: norm });
+  const deletedCount = result.deletedCount ?? 0;
+  if (deletedCount === 0) {
+    throw createHttpError(404, "Qualified seed not found", { expose: true });
+  }
+  return { username: norm };
 };
 
 const mapQualifiedSeedDocs = (docs) =>
@@ -305,6 +326,7 @@ export {
   markProfilesCheckedByUsernames,
   deleteAllPendingProfiles,
   upsertQualifiedSeed,
+  deleteQualifiedSeedByUsername,
   getQualifiedSeedsFiltered,
   getQualifiedSeedsAll,
 };

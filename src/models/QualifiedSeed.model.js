@@ -15,7 +15,7 @@ const qualifiedSeedSchema = new mongoose.Schema(
       min: 0,
     },
   },
-  { timestamps: true },
+  { timestamps: true, collection: "qualified_seed" }
 );
 
 qualifiedSeedSchema.index({ following: 1, username: 1 });

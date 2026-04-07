@@ -113,6 +113,22 @@ const validatePostQualifiedSeed = [
   },
 ];
 
+const validateDeleteQualifiedSeed = [
+  query("username")
+    .isString()
+    .trim()
+    .notEmpty()
+    .withMessage("username is required"),
+
+  (req, res, next) => {
+    const errors = validationResult(req);
+    if (!errors.isEmpty()) {
+      return res.status(422).json({ success: false, errors: errors.array() });
+    }
+    next();
+  },
+];
+
 const validateGetQualifiedSeeds = [
   (req, res, next) => {
     const allRaw = req.query.all;
@@ -174,5 +190,6 @@ export {
   validateGetProfiles,
   validateMarkProfilesChecked,
   validatePostQualifiedSeed,
+  validateDeleteQualifiedSeed,
   validateGetQualifiedSeeds,
 };
