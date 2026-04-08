@@ -258,6 +258,7 @@ const deleteAllPendingProfiles = async () => {
 };
 
 /**
+ * Qualified seeds must match a scraped profile and must not be a pipeline input username.
  * @param {{ username: string; following: number }} params
  */
 const upsertQualifiedSeed = async ({ username, following }) => {
@@ -275,6 +276,22 @@ const upsertQualifiedSeed = async ({ username, following }) => {
     throw createHttpError(400, "following must be a non-negative number", {
       expose: true,
     });
+  }
+
+  // Order matters: one specific error. If already a qualified seed, stop before Input check.
+  if (await QualifiedSeed.exists({ username: norm })) {
+    throw createHttpError(
+      409,
+      "This username is already saved as a qualified seed.",
+      { expose: true }
+    );
+  }
+  if (await Input.exists({ username: norm })) {
+    throw createHttpError(
+      400,
+      "This username is a pipeline input (scrape seed) and cannot be saved as a qualified seed.",
+      { expose: true }
+    );
   }
 
   const followingInt = Math.floor(followingNum);
