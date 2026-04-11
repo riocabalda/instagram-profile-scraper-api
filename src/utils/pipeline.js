@@ -18,7 +18,11 @@ export const chunkArray = (arr, size) => {
  */
 export const processInputUsernames = async (inputs) => {
   const normalized = inputs
-    .map((u) => String(u ?? "").trim().toLowerCase())
+    .map((u) =>
+      String(u ?? "")
+        .trim()
+        .toLowerCase()
+    )
     .filter((u) => u.length > 0);
 
   const counts = new Map();
@@ -88,15 +92,11 @@ export function normalizeProfileId(rawId, usernameNorm) {
 
 /**
  * @param {Record<string, unknown>} profile
- * @param {{ has_external_url: boolean; followersMin: number; followersMax: number }} opts
+ * @param {{ followersMin: number; followersMax: number }} opts
  * @returns {Record<string, unknown> | null}
  */
 export function mapActorProfileToDoc(profile, opts) {
-  const {
-    has_external_url,
-    followersMin = 500,
-    followersMax = 50_000,
-  } = opts;
+  const { followersMin = 500, followersMax = 50_000 } = opts;
   const username = normalizeUsername(profile.username);
   const criteriaCheck =
     profile.followersCount &&
@@ -134,6 +134,8 @@ export function mapActorProfileToDoc(profile, opts) {
     typeof followsRaw === "number" && Number.isFinite(followsRaw)
       ? followsRaw
       : 0;
+  const externalUrl =
+    typeof profile.externalUrl === "string" ? profile.externalUrl.trim() : "";
 
   return {
     id,
@@ -144,7 +146,7 @@ export function mapActorProfileToDoc(profile, opts) {
     followers_count: followers,
     follows_count: follows,
     bio,
-    has_external_url,
+    external_url: externalUrl,
   };
 }
 
@@ -193,7 +195,7 @@ export function mapRelatedProfileToDoc(related) {
     followers_count: followers,
     follows_count: follows,
     bio,
-    has_external_url: false,
+    external_url: "",
   };
 }
 

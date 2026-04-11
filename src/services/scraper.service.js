@@ -36,7 +36,7 @@ const runScrapePipeline = async ({
       {
         duplicates,
         reason: duplicatesInPayload ? "payload" : "database",
-      }
+      },
     );
   }
 
@@ -117,7 +117,6 @@ const runScrapePipeline = async ({
         hasMatchingExternalUrl(profile.externalUrl)
       ) {
         const doc = mapActorProfileToDoc(profile, {
-          has_external_url: false,
           followersMin,
           followersMax,
         });
@@ -145,11 +144,11 @@ const runScrapePipeline = async ({
         .select("username")
         .lean();
       const existingUsernames = new Set(
-        existingProfiles.map((p) => String(p.username).toLowerCase())
+        existingProfiles.map((p) => String(p.username).toLowerCase()),
       );
 
       const newProfiles = dedupedToSave.filter(
-        (p) => !existingUsernames.has(String(p.username).toLowerCase())
+        (p) => !existingUsernames.has(String(p.username).toLowerCase()),
       );
 
       totalDuplicatesSkipped += dedupedToSave.length - newProfiles.length;
@@ -236,7 +235,7 @@ const markProfilesCheckedByUsernames = async (usernames) => {
     ...new Set(
       usernames
         .map((u) => String(u).trim().toLowerCase())
-        .filter((u) => u.length > 0)
+        .filter((u) => u.length > 0),
     ),
   ];
   if (normalized.length === 0) {
@@ -244,7 +243,7 @@ const markProfilesCheckedByUsernames = async (usernames) => {
   }
   const result = await Profile.updateMany(
     { username: { $in: normalized } },
-    { $set: { status: "checked" } }
+    { $set: { status: "checked" } },
   );
   const modifiedCount = result.modifiedCount ?? 0;
   const matchedCount = result.matchedCount ?? modifiedCount;
@@ -258,7 +257,7 @@ const deleteAllPendingProfiles = async () => {
 };
 
 /**
- * Qualified seeds must match a scraped profile and must not be a pipeline input username.
+ * Inserts a qualified seed if the username is not already one and is not a pipeline Input.
  * @param {{ username: string; following: number }} params
  */
 const upsertQualifiedSeed = async ({ username, following }) => {
@@ -283,22 +282,20 @@ const upsertQualifiedSeed = async ({ username, following }) => {
     throw createHttpError(
       409,
       "This username is already saved as a qualified seed.",
-      { expose: true }
+      { expose: true },
     );
   }
   if (await Input.exists({ username: norm })) {
-    throw createHttpError(
-      400,
-      "This username is a pipeline input (scrape seed) and cannot be saved as a qualified seed.",
-      { expose: true }
-    );
+    throw createHttpError(400, "This username is use in pipeline input seed.", {
+      expose: true,
+    });
   }
 
   const followingInt = Math.floor(followingNum);
   await QualifiedSeed.updateOne(
     { username: norm },
     { $set: { username: norm, following: followingInt } },
-    { upsert: true }
+    { upsert: true },
   );
 
   const doc = await QualifiedSeed.findOne({ username: norm }).lean();
@@ -360,7 +357,7 @@ const aggregateQualifiedSeedsExcludingInputs = async (opts = {}) => {
     },
     { $match: { _pipeline_input: { $size: 0 } } },
     { $sort: { createdAt: -1 } },
-    { $project: { username: 1, following: 1, _id: 0 } }
+    { $project: { username: 1, following: 1, _id: 0 } },
   );
 
   const docs = await QualifiedSeed.aggregate(pipeline);
