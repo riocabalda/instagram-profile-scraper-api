@@ -12,6 +12,7 @@ import {
   getProfiles,
   markProfilesChecked,
   deletePendingProfiles,
+  deleteInputsByUsernames,
   postQualifiedSeed,
   getQualifiedSeeds,
   deleteQualifiedSeed,
@@ -28,21 +29,24 @@ router.get("/profiles", validateGetProfiles, getProfiles);
 // DELETE /api/scraper/profiles/pending — remove all pending profiles
 router.delete("/profiles/pending", deletePendingProfiles);
 
+// DELETE /api/scraper/inputs/usernames — remove specific usernames from inputs
+router.delete(
+  "/inputs/usernames",
+  validateMarkProfilesChecked,
+  deleteInputsByUsernames,
+);
+
 // PATCH /api/scraper/profiles — mark usernames as checked (reviewed)
 router.patch("/profiles", validateMarkProfilesChecked, markProfilesChecked);
 
 // POST /api/scraper/qualified-seeds — save a qualified seed (username + following)
-router.post(
-  "/qualified-seeds",
-  validatePostQualifiedSeed,
-  postQualifiedSeed
-);
+router.post("/qualified-seeds", validatePostQualifiedSeed, postQualifiedSeed);
 
 // DELETE /api/scraper/qualified-seeds?username=sam.22 — remove one qualified seed
 router.delete(
   "/qualified-seeds",
   validateDeleteQualifiedSeed,
-  deleteQualifiedSeed
+  deleteQualifiedSeed,
 );
 
 // GET /api/scraper/qualified-seeds?followingLimit=500

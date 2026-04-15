@@ -21,7 +21,7 @@ export const processInputUsernames = async (inputs) => {
     .map((u) =>
       String(u ?? "")
         .trim()
-        .toLowerCase()
+        .toLowerCase(),
     )
     .filter((u) => u.length > 0);
 

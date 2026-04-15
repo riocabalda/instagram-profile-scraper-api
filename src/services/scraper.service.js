@@ -257,6 +257,28 @@ const deleteAllPendingProfiles = async () => {
 };
 
 /**
+ * Delete specific usernames from the inputs collection
+ * @param {string[]} usernames - Array of usernames to delete
+ */
+const deleteInputsByUsernames = async (usernames) => {
+  const normalized = [
+    ...new Set(
+      usernames
+        .map((u) => String(u).trim().toLowerCase())
+        .filter((u) => u.length > 0),
+    ),
+  ];
+
+  if (normalized.length === 0) {
+    return { deletedCount: 0, requestedCount: usernames.length };
+  }
+
+  const result = await Input.deleteMany({ username: { $in: normalized } });
+  const deletedCount = result.deletedCount ?? 0;
+  return { deletedCount, requestedCount: normalized.length };
+};
+
+/**
  * Inserts a qualified seed if the username is not already one and is not a pipeline Input.
  * @param {{ username: string; following: number }} params
  */
@@ -391,11 +413,12 @@ const getQualifiedSeedsFiltered = async ({ followingLimit }) => {
   return aggregateQualifiedSeedsExcludingInputs({ followingMax: cap });
 };
 
-export {
+export default {
   runScrapePipeline,
   getPendingProfiles,
   markProfilesCheckedByUsernames,
   deleteAllPendingProfiles,
+  deleteInputsByUsernames,
   upsertQualifiedSeed,
   deleteQualifiedSeedByUsername,
   getQualifiedSeedsFiltered,
